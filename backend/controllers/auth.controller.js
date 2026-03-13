@@ -1,6 +1,7 @@
 import { User } from "../models/user.model.js";
 import bcryptjs from "bcryptjs";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
+import { sendVerificationEmail } from "../mailtrap/emails.js";
 
 export const signUp = async (req, res) => {
   const { email, password, name } = req.body;
@@ -27,7 +28,7 @@ export const signUp = async (req, res) => {
     ).toString();
 
     // Create a new user with the hashed password and verification token
-    const user = await new User({
+    const user = new User({
       email,
       password: hashedPassword,
       name,
@@ -40,6 +41,8 @@ export const signUp = async (req, res) => {
 
     // Generate a token and set it as a cookie
     generateTokenAndSetCookie(res, user._id);
+
+    await sendVerificationEmail(user.email, verificationToken);
 
     res.status(201).json({
       success: true,

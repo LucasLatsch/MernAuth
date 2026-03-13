@@ -1,10 +1,10 @@
-import express from "express";
-import dotenv from "dotenv";
+import "dotenv/config";
 
+const token = process.env.MAILTRAP_TOKEN;
+
+import express from "express";
 import { connectDb } from "./database/connectDB.js";
 import authRoutes from "./routes/auth.route.js";
-
-dotenv.config(); // Load environment variables from .env file
 
 const app = express(); // Create an instance of the Express application
 const PORT = process.env.PORT || 5000;
