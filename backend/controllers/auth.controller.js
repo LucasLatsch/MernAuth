@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { generateTokenAndSetCookie } from "../utils/generateTokenAndSetCookie.js";
 import {
   sendPassordResetEmail,
+  sendResetSuccessEmail,
   sendVerificationEmail,
   sendWelcomeEmail,
 } from "../mailtrap/emails.js";
@@ -47,7 +48,14 @@ export const signUp = async (req, res) => {
     // Generate a token and set it as a cookie
     generateTokenAndSetCookie(res, user._id);
 
-    await sendVerificationEmail(user.email, verificationToken);
+    if (process.env.NODE_ENV === "production") {
+      await sendVerificationEmail(user.email, verificationToken);
+    }
+
+    console.log(
+      "User created successfully:",
+      user.email + " | " + verificationToken,
+    );
 
     res.status(201).json({
       success: true,
@@ -85,13 +93,21 @@ export const verifyEmail = async (req, res) => {
     user.verificationTokenExpiresAt = undefined;
     await user.save();
 
-    await sendWelcomeEmail(user.email, user.name);
+    if (process.env.NODE_ENV === "production") {
+      await sendWelcomeEmail(user.email, user.name);
+    }
+
+    console.log(
+      "Email verified successfully for user:",
+      user.email + " | " + user.name,
+    );
+
     return res.status(200).json({
       success: true,
       message: "Welcome email sent successfully",
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -129,7 +145,7 @@ export const login = async (req, res) => {
       user: { ...user._doc, password: undefined },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -152,17 +168,60 @@ export const forgotPassword = async (req, res) => {
 
     await user.save();
 
-    await sendPassordResetEmail(
-      user.email,
-      `${process.env.CLIENT_URL}/reset-password/${resetToken}`,
+    const resetURL = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+
+    if (process.env.NODE_ENV === "production") {
+      await sendPassordResetEmail(user.email, resetURL);
+    }
+
+    console.log(
+      "Reset Link: ",
+      resetURL + " | " + resetToken + " | " + resetTokenExpiresAt,
     );
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset email sent successfully",
+    });
   } catch (error) {
-    console.error("Error in forgotPassword:", error);
-    res.status(500).json({ success: false, message: "Server error" });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-export const resetPassword = async (req, res) => {};
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+    const user = await User.findOne({
+      resetPasswordToken: token,
+      resetPasswordExpiresAt: { $gt: Date.now() },
+    });
+    if (!user) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid or expired reset token" });
+    }
+
+    const hashedPassword = await bcryptjs.hash(password, 10);
+    user.password = hashedPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpiresAt = undefined;
+    await user.save();
+
+    if (process.env.NODE_ENV === "production") {
+      await sendResetSuccessEmail(user.email);
+    }
+
+    console.log("Password reset successful for user:", user.email);
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
 
 export const logout = async (req, res) => {
   res.clearCookie("token");
